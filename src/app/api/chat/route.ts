@@ -1,24 +1,21 @@
-import OpenAI from "openai";
-import { NextResponse } from "next/server";
+import OpenAI from "openai"
+import { NextResponse } from "next/server"
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-// ✅ Handle preflight CORS request
-export async function OPTIONS() {
-  return NextResponse.json({}, {
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    },
-  });
-}
+  apiKey: process.env.OPENAI_API_KEY!,
+})
 
 export async function POST(req: Request) {
   try {
-    const { message } = await req.json();
+    const body = await req.json()
+    const userMessage = body.message || body.input || ""
+
+    if (!userMessage || typeof userMessage !== "string") {
+      return NextResponse.json(
+        { error: "No valid message provided." },
+        { status: 400 }
+      )
+    }
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -26,25 +23,23 @@ export async function POST(req: Request) {
         {
           role: "system",
           content:
-            "You are James Flores' AI portfolio assistant. Speak professionally and confidently about his design work.",
+            "You are an AI assistant representing James Flores, a senior product designer. Speak clearly, professionally, and concisely.",
         },
-        { role: "user", content: message },
+        {
+          role: "user",
+          content: userMessage,
+        },
       ],
-    });
+    })
 
-    return NextResponse.json(
-      { reply: completion.choices[0].message.content },
-      {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-        },
-      }
-    );
+    return NextResponse.json({
+      reply: completion.choices[0].message.content,
+    })
   } catch (error) {
-    console.error(error);
+    console.error("API Error:", error)
     return NextResponse.json(
-      { error: "Something went wrong." },
+      { error: "Internal Server Error" },
       { status: 500 }
-    );
+    )
   }
 }
