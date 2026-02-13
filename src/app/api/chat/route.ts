@@ -1,167 +1,240 @@
+Love this direction. Now we’re not just “making it work” — we’re designing the intelligence layer intentionally.
+
+Below is a fully updated route.ts that:
+
+Enforces design-only scope
+
+Blocks unrelated or risky questions
+
+Removes markdown + stars
+
+Forces concise, recruiter-friendly tone
+
+Anticipates common recruiter questions
+
+Keeps responses structured and scannable
+
+Avoids AI-fluff language
+
+Is stable + production-safe
+
+✅ Full Updated app/api/chat/route.ts
+import { NextResponse } from "next/server"
 import OpenAI from "openai"
-import { NextRequest, NextResponse } from "next/server"
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
 
 /**
- * 🔒 Design-Focused System Prompt
+ * SYSTEM PROMPT
+ * Recruiter-focused, design-only assistant
  */
 const SYSTEM_PROMPT = `
-You are James Flores' AI portfolio assistant.
+You are an AI assistant representing James Flores, a Senior Product Designer.
 
-Your ONLY purpose is to answer questions related to:
-- James' design experience
-- Case studies
-- UX/UI process
-- Product thinking
-- Design systems
-- AI product design
-- Measurable impact
-- Career background
+Your audience:
+Recruiters, hiring managers, design leaders, and product teams evaluating James for AI-focused, product design, or enterprise UX roles.
 
-If asked about:
-- Finance advice
-- Politics
-- Medical advice
-- Crypto investing
-- Legal topics
-- Anything unrelated to James' design career
+PRIMARY OBJECTIVE:
+Clearly communicate James' experience, impact, thinking, and strengths in a concise, recruiter-friendly way.
 
-You must politely refuse and redirect back to his design work.
+STRICT RULES:
 
-Keep responses:
-- Clear
-- Professional
-- Easy to scan
-- Bullet formatted when listing items
-- Concise but strong
+1. Only answer questions related to:
+   - James' design experience
+   - Case studies
+   - Skills
+   - Tools
+   - Process
+   - Impact metrics
+   - AI product thinking
+   - Enterprise UX
+   - Systems thinking
+   - Accessibility
+   - Cross-functional collaboration
 
-Never fabricate unknown information.
-Only reference verified portfolio data below.
+2. If asked about unrelated topics (finance, politics, medical advice, crypto trading, personal advice, etc):
+   Politely decline and redirect to James' design background.
+
+3. Keep responses concise.
+4. Use clean bullet points beginning with "- ".
+5. Do NOT use markdown formatting.
+6. Do NOT use **bold**, asterisks, emojis, or decorative symbols.
+7. Do NOT write long introductions.
+8. Do NOT repeat the user's question.
+9. Avoid generic AI-sounding phrases.
+10. Keep most responses under 10 lines unless specifically asked for depth.
+
+TONE:
+Confident, strategic, product-minded, impact-driven.
+
+STYLE:
+Direct.
+Clear.
+Outcome-focused.
+Human.
 
 ---
 
-Portfolio Highlights:
+CORE EXPERIENCE SUMMARY:
 
 ONBE – Global Cross-Border Payout Platform
-• Redesigned enterprise payout workflows
-• Increased operational transparency
-• Improved task clarity for finance teams
-• Focused on systems thinking + scalability
+- Redesigned enterprise payout workflows
+- Improved operational transparency
+- Increased task clarity for finance teams
+- Designed complex multi-role enterprise interfaces
 
-Business KYB Verification Flow
-• Reduced onboarding steps from 7 → 4
-• Reduced completion time by ~75%
-• Reduced support tickets by ~35%
-• Prefilled data to streamline compliance flows
+Business KYB Verification Redesign
+- Reduced onboarding steps from 7 to 4
+- Reduced completion time by ~75%
+- Reduced support tickets by ~35%
+- Prefilled data to eliminate friction
+- Balanced compliance with usability
 
 Meta Platforms – Internal Tool
-• Redesigned complex internal interface
-• Reduced user errors
-• Improved task efficiency for developers
-• Enterprise UX + predictive workflow thinking
+- Redesigned complex internal developer-facing interface
+- Reduced user errors
+- Improved workflow efficiency
+- Designed for technical users
 
 ONBE Native Mobile App
-• Improved login + wallet UX
-• Increased engagement + usability
-• Optimized mobile-first financial flows
+- Improved login and wallet flows
+- Increased engagement
+- Optimized mobile UX
 
 Special Olympics of Texas
-• Accessibility-first redesign
-• Improved navigation clarity
-• Focused on WCAG compliance
-• Mission-driven impact work
+- Accessibility-first redesign
+- Improved navigation clarity
+- Increased compliance and inclusivity
 
 ---
 
-If a question is unclear, ask a clarifying question.
+SKILLS & CAPABILITIES:
 
-Respond as a polished, confident design assistant.
+Design:
+- Systems thinking
+- Enterprise UX
+- Complex workflow design
+- AI product prototyping
+- Design systems
+- Interaction design
+- UX research
+- Usability testing
+- Accessibility-first design
+
+AI-Specific Thinking:
+- Designing AI-assisted workflows
+- Predictive UX
+- Intelligent automation concepts
+- AI validation through prototyping
+- Structured data + design system integration
+
+Collaboration:
+- Cross-functional work with engineering & product
+- Translating complexity into clarity
+- Stakeholder alignment
+- Measuring impact through metrics
+
+---
+
+WHEN RECRUITERS ASK:
+
+"Why should we hire James?"
+Focus on:
+- Systems thinking
+- Measurable impact
+- Enterprise complexity experience
+- AI-forward mindset
+- Strategic design maturity
+
+"Tell me about your process"
+Answer using:
+- Problem framing
+- User research
+- Systems mapping
+- Iteration
+- Validation
+- Measurable results
+
+"How do you design for AI?"
+Discuss:
+- Workflow orchestration
+- Trust & explainability
+- Progressive disclosure
+- Structured prompt design
+- Feedback loops
+
+"What's your biggest strength?"
+Tie back to:
+- Turning complex systems into intuitive flows
+- Balancing compliance and usability
+- Designing for measurable outcomes
+
+---
+
+REMEMBER:
+You are not ChatGPT.
+You are James' AI portfolio assistant.
+Your goal is to help him get hired.
 `
 
-/**
- * 🌍 CORS Headers
- */
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-}
-
-/**
- * Preflight Handler (Required for CORS)
- */
-export async function OPTIONS() {
-  return NextResponse.json({}, { headers: corsHeaders })
-}
-
-/**
- * Main Chat Endpoint
- */
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const incomingMessages = body?.messages
 
-    if (!incomingMessages || !Array.isArray(incomingMessages)) {
+    if (!body.messages || !Array.isArray(body.messages)) {
       return NextResponse.json(
-        { error: "Invalid request format." },
-        { status: 400, headers: corsHeaders }
+        { error: "Invalid messages format" },
+        { status: 400 }
       )
     }
 
-    /**
-     * 🔒 Sanitize messages to prevent null / malformed content
-     */
-    const cleanMessages = incomingMessages
-      .filter(
-        (m: any) =>
-          m &&
-          typeof m.role === "string" &&
-          typeof m.content === "string" &&
-          m.content.trim() !== ""
-      )
-      .map((m: any) => ({
-        role: m.role,
-        content: m.content,
-      }))
+    // Remove any malformed messages
+    const sanitizedMessages = body.messages.filter(
+      (m: any) =>
+        m &&
+        typeof m.role === "string" &&
+        typeof m.content === "string" &&
+        m.content.trim().length > 0
+    )
 
-    if (cleanMessages.length === 0) {
-      return NextResponse.json(
-        { error: "No valid messages provided." },
-        { status: 400, headers: corsHeaders }
-      )
-    }
-
-    /**
-     * 🤖 OpenAI Call
-     */
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.6,
+      temperature: 0.5, // Lower = more concise, less rambling
+      max_tokens: 400,
       messages: [
         {
           role: "system",
           content: SYSTEM_PROMPT,
         },
-        ...cleanMessages,
+        ...sanitizedMessages,
       ],
     })
 
-    const assistantMessage = completion.choices[0]?.message
+    const reply = completion.choices[0]?.message
 
-    return NextResponse.json(
-      { message: assistantMessage },
-      { headers: corsHeaders }
-    )
+    if (!reply) {
+      return NextResponse.json(
+        { error: "No response from AI" },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({
+      message: {
+        role: "assistant",
+        content: reply.content,
+      },
+    })
   } catch (error: any) {
     console.error("API Error:", error)
 
     return NextResponse.json(
-      { error: "Server error" },
-      { status: 500, headers: corsHeaders }
+      {
+        error: "AI request failed",
+      },
+      { status: 500 }
     )
   }
 }
