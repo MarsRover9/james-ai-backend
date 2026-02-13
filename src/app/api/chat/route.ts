@@ -5,7 +5,9 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 })
 
-// ✅ Handle CORS preflight
+// -------------------------
+// CORS PRE-FLIGHT SUPPORT
+// -------------------------
 export async function OPTIONS() {
   return NextResponse.json(
     {},
@@ -19,6 +21,56 @@ export async function OPTIONS() {
   )
 }
 
+// -------------------------
+// KNOWLEDGE BASE (Condensed)
+// -------------------------
+const portfolioContext = `
+James Flores is a Senior Product Designer specializing in enterprise fintech, AI systems, and complex workflow design.
+
+CASE STUDY: ONBE – Global Cross-Border Payout Platform
+- Led UX redesign of enterprise payout workflows.
+- Reduced workflow time by ~45–55%.
+- Increased feature adoption ~20%.
+- Reduced payout support tickets 15–25%.
+- Focused on transparency, fee clarity, and progressive disclosure.
+
+CASE STUDY: BUSINESS KYB VERIFICATION
+- Redesigned enterprise compliance onboarding flow.
+- Reduced completion time ~75% (45–60 min → 12–15 min).
+- Reduced support tickets ~35%.
+- Implemented adaptive steps + intelligent prefill.
+- Balanced regulatory compliance with usability.
+
+CASE STUDY: META PLATFORMS – INTERNAL TOOL
+- Redesigned complex internal enterprise interface.
+- Reduced user errors.
+- Improved task completion speed.
+- Simplified hierarchy and system feedback.
+
+CASE STUDY: ONBE NATIVE MOBILE APP
+- Optimized mobile fintech login + wallet experience.
+- Reduced login abandonment.
+- Improved tap targets and interaction clarity.
+- Increased mobile engagement.
+
+CASE STUDY: SPECIAL OLYMPICS OF TEXAS
+- Accessibility-first redesign.
+- Improved WCAG compliance.
+- Increased successful registrations.
+- Simplified navigation and inclusive UX.
+
+Core Strengths:
+- Systems thinking
+- Enterprise UX simplification
+- AI product integration
+- Regulatory UX
+- Design systems
+- Data-informed iteration
+`
+
+// -------------------------
+// MAIN API HANDLER
+// -------------------------
 export async function POST(req: Request) {
   try {
     const body = await req.json()
@@ -31,7 +83,9 @@ export async function POST(req: Request) {
       )
     }
 
-    // ✅ Basic backend guardrail layer
+    // -------------------------
+    // LIGHT BACKEND GUARDRAILS
+    // -------------------------
     const disallowedKeywords = [
       "investment",
       "stocks",
@@ -45,6 +99,7 @@ export async function POST(req: Request) {
       "religion",
       "violence",
       "hate",
+      "financial advice",
     ]
 
     const lowerMessage = userMessage.toLowerCase()
@@ -63,6 +118,9 @@ export async function POST(req: Request) {
       )
     }
 
+    // -------------------------
+    // OPENAI CALL
+    // -------------------------
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.7,
@@ -70,34 +128,22 @@ export async function POST(req: Request) {
         {
           role: "system",
           content: `
-You are an AI assistant representing James Flores, a senior product designer.
+You are an AI assistant representing James Flores.
 
-You ONLY answer questions related to:
-- His professional design experience
-- His case studies
-- His product design process
-- UX strategy
-- AI product thinking
-- Systems thinking
-- Tools, workflows, and methodologies he uses
-- Career trajectory and measurable impact
+You ONLY answer questions related to his professional design career, case studies, UX strategy, systems thinking, AI product work, and measurable impact.
 
-When discussing his work:
-- Emphasize measurable impact
-- Highlight systems thinking
-- Explain design decisions and tradeoffs
-- Speak like a senior product designer
-- Be concise but insightful
+Use the portfolio context below to answer accurately and confidently:
 
-If a user asks about topics unrelated to his design career — including financial advice, medical advice, politics, religion, legal advice, or anything potentially harmful — you must politely refuse.
+${portfolioContext}
 
-When refusing, respond exactly with:
+Rules:
+- Emphasize measurable impact.
+- Highlight systems thinking and tradeoffs.
+- Speak concisely but insightfully.
+- Do NOT answer financial, medical, political, religious, or harmful questions.
+- If a question is unrelated to his design work, respond exactly with:
+
 "I’m here to answer questions about James’ design experience and work. Let me know how I can help with that."
-
-Do not speculate.
-Do not role-play.
-Do not provide advice outside design.
-Never generate harmful or risky content.
 `,
         },
         {
@@ -108,7 +154,9 @@ Never generate harmful or risky content.
     })
 
     return NextResponse.json(
-      { reply: completion.choices[0].message.content },
+      {
+        reply: completion.choices[0].message.content,
+      },
       {
         headers: {
           "Access-Control-Allow-Origin": "*",
