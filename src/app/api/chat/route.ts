@@ -1,178 +1,123 @@
+import { NextRequest, NextResponse } from "next/server"
 import OpenAI from "openai"
-import { NextResponse } from "next/server"
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
+  apiKey: process.env.OPENAI_API_KEY,
 })
 
-// -------------------------
-// CORS PRE-FLIGHT SUPPORT
-// -------------------------
-export async function OPTIONS() {
-  return NextResponse.json(
-    {},
-    {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
-    }
-  )
-}
-
-// -------------------------
-// KNOWLEDGE BASE (Condensed)
-// -------------------------
 const portfolioContext = `
-James Flores is a Senior Product Designer specializing in enterprise fintech, AI systems, and complex workflow design.
+James Flores is a Senior Product Designer focused on enterprise fintech, AI systems, and complex workflow redesign.
 
-CASE STUDY: ONBE – Global Cross-Border Payout Platform
-- Led UX redesign of enterprise payout workflows.
-- Reduced workflow time by ~45–55%.
-- Increased feature adoption ~20%.
-- Reduced payout support tickets 15–25%.
-- Focused on transparency, fee clarity, and progressive disclosure.
+Key Projects & Impact:
 
-CASE STUDY: BUSINESS KYB VERIFICATION
-- Redesigned enterprise compliance onboarding flow.
-- Reduced completion time ~75% (45–60 min → 12–15 min).
-- Reduced support tickets ~35%.
-- Implemented adaptive steps + intelligent prefill.
-- Balanced regulatory compliance with usability.
+ONBE – Global Cross-Border Payout Platform
+- Redesigned enterprise payout workflows
+- Reduced task completion time 45–55%
+- Improved operational clarity and transparency
+- Introduced scalable design system thinking
 
-CASE STUDY: META PLATFORMS – INTERNAL TOOL
-- Redesigned complex internal enterprise interface.
-- Reduced user errors.
-- Improved task completion speed.
-- Simplified hierarchy and system feedback.
+Business KYB Verification Flow Redesign
+- Reduced onboarding time by 75% (45–60 min down to 12–15 min)
+- Cut support tickets by 35%
+- Increased onboarding completion rates
+- Introduced intelligent pre-fill logic
 
-CASE STUDY: ONBE NATIVE MOBILE APP
-- Optimized mobile fintech login + wallet experience.
-- Reduced login abandonment.
-- Improved tap targets and interaction clarity.
-- Increased mobile engagement.
+Meta Platforms – Internal Enterprise Tool
+- Redesigned predictive internal tooling
+- Reduced user friction and operational errors
+- Improved developer workflow efficiency
+- Simplified complex system architecture
 
-CASE STUDY: SPECIAL OLYMPICS OF TEXAS
-- Accessibility-first redesign.
-- Improved WCAG compliance.
-- Increased successful registrations.
-- Simplified navigation and inclusive UX.
+ONBE Native Mobile App
+- Optimized mobile wallet and login flows
+- Improved engagement and usability
+- Modernized mobile design patterns
+- Strengthened cross-platform experience
 
-Core Strengths:
+Special Olympics of Texas
+- Accessibility-first redesign
+- Improved WCAG compliance
+- Simplified navigation and content hierarchy
+- Focused on inclusive UX strategy
+
+James specializes in:
 - Systems thinking
-- Enterprise UX simplification
-- AI product integration
-- Regulatory UX
-- Design systems
-- Data-informed iteration
+- AI-integrated product design
+- Enterprise UX strategy
+- Complex workflow simplification
+- Measurable impact-driven design
 `
 
-// -------------------------
-// MAIN API HANDLER
-// -------------------------
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const userMessage = body.message
+    const messages = body?.messages
 
-    if (!userMessage || typeof userMessage !== "string") {
+    if (!messages || !Array.isArray(messages)) {
       return NextResponse.json(
-        { error: "Invalid message." },
+        { error: "Invalid request format." },
         { status: 400 }
       )
     }
 
-    // -------------------------
-    // LIGHT BACKEND GUARDRAILS
-    // -------------------------
-    const disallowedKeywords = [
-      "investment",
-      "stocks",
-      "crypto",
-      "medical",
-      "diagnosis",
-      "therapy",
-      "legal advice",
-      "lawsuit",
-      "politics",
-      "religion",
-      "violence",
-      "hate",
-      "financial advice",
-    ]
-
-    const lowerMessage = userMessage.toLowerCase()
-
-    if (disallowedKeywords.some((word) => lowerMessage.includes(word))) {
-      return NextResponse.json(
-        {
-          reply:
-            "I’m here to answer questions about James’ design experience and work. Let me know how I can help with that.",
-        },
-        {
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-          },
-        }
-      )
-    }
-
-    // -------------------------
-    // OPENAI CALL
-    // -------------------------
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.7,
+      temperature: 0.6,
       messages: [
         {
           role: "system",
           content: `
 You are an AI assistant representing James Flores.
 
-You ONLY answer questions related to his professional design career, case studies, UX strategy, systems thinking, AI product work, and measurable impact.
+You ONLY answer questions related to his professional design career, UX strategy, AI product thinking, enterprise systems, or measurable impact.
 
-Use the portfolio context below to answer accurately and confidently:
+Use the portfolio context below to respond accurately:
 
 ${portfolioContext}
 
-Rules:
-- Emphasize measurable impact.
-- Highlight systems thinking and tradeoffs.
-- Speak concisely but insightfully.
-- Do NOT answer financial, medical, political, religious, or harmful questions.
-- If a question is unrelated to his design work, respond exactly with:
+RESPONSE RULES:
+
+- Do NOT use markdown.
+- Do NOT use asterisks.
+- Do NOT use numbered lists.
+- Use clean bullet points with hyphens.
+- Keep responses concise and recruiter-friendly.
+- Prioritize measurable impact.
+- Keep paragraphs short.
+- Avoid fluff.
+- Avoid repeating the question.
+- Keep answers focused and strategic.
+
+Example format:
+
+James has worked on:
+
+- Enterprise fintech platforms reducing workflow time 45–55%
+- Compliance onboarding redesign cutting completion time 75%
+- Internal enterprise tools improving task efficiency
+- Accessibility-focused nonprofit platforms improving compliance
+
+If a question is unrelated to James' design work, respond exactly with:
 
 "I’m here to answer questions about James’ design experience and work. Let me know how I can help with that."
-`,
+`
         },
-        {
-          role: "user",
-          content: userMessage,
-        },
-      ],
+        ...messages
+      ]
     })
 
-    return NextResponse.json(
-      {
-        reply: completion.choices[0].message.content,
-      },
-      {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-        },
-      }
-    )
-  } catch (error) {
+    const assistantMessage = completion.choices[0]?.message
+
+    return NextResponse.json({
+      message: assistantMessage
+    })
+
+  } catch (error: any) {
     console.error("API Error:", error)
+
     return NextResponse.json(
-      { error: "Internal Server Error" },
-      {
-        status: 500,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-        },
-      }
+      { error: "Something went wrong processing the request." },
+      { status: 500 }
     )
   }
 }
