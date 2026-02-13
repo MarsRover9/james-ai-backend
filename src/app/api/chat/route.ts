@@ -5,14 +5,24 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 })
 
+export async function OPTIONS() {
+  return NextResponse.json({}, {
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    },
+  })
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const userMessage = body.message || body.input || ""
+    const userMessage = body.message
 
     if (!userMessage || typeof userMessage !== "string") {
       return NextResponse.json(
-        { error: "No valid message provided." },
+        { error: "Invalid message." },
         { status: 400 }
       )
     }
@@ -32,14 +42,24 @@ export async function POST(req: Request) {
       ],
     })
 
-    return NextResponse.json({
-      reply: completion.choices[0].message.content,
-    })
+    return NextResponse.json(
+      { reply: completion.choices[0].message.content },
+      {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    )
   } catch (error) {
     console.error("API Error:", error)
     return NextResponse.json(
       { error: "Internal Server Error" },
-      { status: 500 }
+      {
+        status: 500,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
     )
   }
 }
