@@ -31,25 +31,23 @@ export async function OPTIONS() {
 /* 🧠 V3 INTELLIGENCE LAYER      */
 /* ----------------------------- */
 
-/**
- * Normalize common misspellings / wrong-name inputs to keep the assistant grounded.
- * (Lightweight + deterministic; avoids regressions.)
- */
 function normalizeUserText(raw: string) {
   if (!raw) return raw
   let t = raw.trim()
 
   // Normalize whitespace
-  t = t.replace(/\r\n/g, "\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n")
+  t = t
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
 
-  // If user misspells or uses other names (like "Jada"), keep assistant anchored to James.
-  // Do NOT rewrite inside code blocks, but you aren't sending code here anyway.
+  // Normalize common name misspellings / wrong-name inputs
   t = t.replace(/\bJada\b/gi, "James")
-  t = t.replace(/\bJame?s?\b/gi, "James") // Jame, James, Jams (partial help)
+  t = t.replace(/\bJame\b/gi, "James")
+  t = t.replace(/\bJaems\b/gi, "James")
+  t = t.replace(/\bJams\b/gi, "James")
   t = t.replace(/\bJame\s+Flores\b/gi, "James Flores")
   t = t.replace(/\bJames\s+Flore?s\b/gi, "James Flores")
-
-  // Normalize the site owner's name variations
   t = t.replace(/\bJames\s+Jason\s+Flores\b/gi, "James Flores")
 
   return t
@@ -71,17 +69,16 @@ function isJDIntent(text: string) {
   const t = text.toLowerCase()
   return (
     t.includes("job description") ||
-    t.includes("jd") ||
+    t.includes(" jd") ||
+    t.includes("jd:") ||
     t.includes("role fit") ||
     t.includes("fit into this role") ||
     t.includes("fit for this role") ||
-    t.includes("fit with this role") ||
     t.includes("match this role") ||
     t.includes("tailor") ||
     t.includes("ats") ||
     t.includes("requirements") ||
     t.includes("qualifications") ||
-    t.includes("how do i align") ||
     t.includes("how would he fit") ||
     t.includes("how would james fit") ||
     t.includes("positioning for this role")
@@ -90,13 +87,12 @@ function isJDIntent(text: string) {
 
 /**
  * Heuristic: does the user actually provide a JD block?
- * We treat as "present" if they include enough length OR common JD markers.
  */
 function hasSufficientJD(text: string) {
   const t = text.trim()
-  if (t.length >= 700) return true // real JD paste is usually long
-  const lower = t.toLowerCase()
+  if (t.length >= 700) return true
 
+  const lower = t.toLowerCase()
   const markers = [
     "responsibilities",
     "requirements",
@@ -118,7 +114,6 @@ function hasSufficientJD(text: string) {
   const hits = markers.filter((m) => lower.includes(m)).length
   if (hits >= 2 && t.length >= 250) return true
 
-  // Looks like a pasted listing (lots of line breaks)
   const lineCount = t.split("\n").filter(Boolean).length
   if (lineCount >= 12 && t.length >= 300) return true
 
@@ -126,12 +121,11 @@ function hasSufficientJD(text: string) {
 }
 
 /**
- * Only refuse if clearly unrelated (avoid the “everything gets refused” regression).
+ * Only refuse if clearly unrelated (avoid over-refusal regression).
  */
 function isClearlyIrrelevant(text: string) {
   const t = text.toLowerCase()
 
-  // If it contains obvious "professional" anchors, it's NOT irrelevant.
   const professionalAnchors = [
     "design",
     "product",
@@ -172,7 +166,6 @@ function isClearlyIrrelevant(text: string) {
   ]
   if (professionalAnchors.some((k) => t.includes(k))) return false
 
-  // Clearly off-topic domains
   const offTopic = [
     "medical",
     "diagnose",
@@ -181,30 +174,97 @@ function isClearlyIrrelevant(text: string) {
     "politics",
     "election",
     "vote",
-    "trump",
-    "biden",
-    "israel",
-    "palestine",
     "crypto price",
     "buy bitcoin",
     "stock pick",
-    "sports score",
     "parlay",
     "gambling",
-    "astrology",
-    "numerology",
-    "girlfriend",
-    "boyfriend",
-    "dating advice",
     "sex",
     "porn",
   ]
   if (offTopic.some((k) => t.includes(k))) return true
 
-  // If it's short + generic, treat as ambiguous, not irrelevant (don’t refuse).
-  if (t.trim().length <= 20) return false
-
   return false
+}
+
+/* ----------------------------- */
+/* 🛡 Consultation Boundary      */
+/* ----------------------------- */
+
+/**
+ * Detect when a user is asking for advice for THEIR product/startup, which we want to
+ * avoid turning into free step-by-step consulting.
+ */
+function isClientSpecificAdviceRequest(text: string) {
+  const t = text.toLowerCase()
+
+  const ownershipSignals = [
+    "my product",
+    "my startup",
+    "my company",
+    "my app",
+    "my team",
+    "our product",
+    "our startup",
+    "our company",
+    "our app",
+    "we are building",
+    "we're building",
+    "we are designing",
+    "we're designing",
+    "for my users",
+    "for our users",
+    "for our business",
+    "for my business",
+    "for my client",
+    "for our client",
+  ]
+
+  const adviceSignals = [
+    "can you design",
+    "can you help design",
+    "tell me how to",
+    "step by step",
+    "exact steps",
+    "what should i do",
+    "what do you recommend",
+    "how should we",
+    "how do we",
+    "what is the best way",
+    "give me a flow",
+    "give me a framework",
+    "how would you build",
+    "how would you approach our",
+    "audit our",
+    "review our",
+  ]
+
+  const hasOwnership = ownershipSignals.some((p) => t.includes(p))
+  const wantsAdvice = adviceSignals.some((p) => t.includes(p))
+
+  return hasOwnership && wantsAdvice
+}
+
+/**
+ * Also catch cases where they don't say "my startup" explicitly, but are asking for
+ * detailed implementation guidance for a specific flow.
+ */
+function isPrescriptiveFlowAdvice(text: string) {
+  const t = text.toLowerCase()
+  const prescriptivePatterns = [
+    "design a kyc flow",
+    "design a kyb flow",
+    "design a kyc/kyb flow",
+    "implement a kyc flow",
+    "implement a kyb flow",
+    "write the exact flow",
+    "exact screens",
+    "exact steps",
+    "what fields should we collect",
+    "what provider should we use",
+    "what is the best kyc vendor",
+  ]
+  return prescriptivePatterns.some((p) => t.includes(p))
 }
 
 /* ----------------------------- */
@@ -224,15 +284,15 @@ FORMATTING RULES (CRITICAL):
 - Each paragraph: 1–2 sentences.
 - Use spacing between sections.
 - Use simple labeled sections when helpful (ONBE, Meta Platforms, etc).
-- Use short bullet-like line breaks if helpful (hyphen lines), but NO markdown bullets, NO asterisks, NO bold.
+- Use short bullet-like line breaks if helpful using hyphen lines only, but NO markdown bullets, NO asterisks, NO bold.
 - No emojis.
 - No special symbols like ★, •, or markdown formatting.
 - Keep answers tight, readable, and recruiter-friendly.
 
 TRUTH / ACCURACY (CRITICAL):
 - Do NOT invent details.
-- If you’re unsure, say what you can confidently say based on the known background.
-- Title accuracy: At Onbe, James’ title was Product Designer (not “Senior” in title). You may still describe his scope as senior-level if relevant, but do not claim the title was Senior Product Designer at Onbe.
+- If unsure, say what you can confidently say based on the known background.
+- Title accuracy: At Onbe, James’ title was Product Designer (not “Senior” in title). You may describe his scope as senior-level when relevant, but do not claim the title was Senior Product Designer at Onbe.
 
 POSITIONING:
 James is an AI-oriented product designer with strong systems thinking and engineering fluency. He specializes in:
@@ -256,20 +316,19 @@ ONBE (Product Designer, Jul 2022 – Jun 2025):
 - Conducted user research, usability testing, and data analysis to reduce friction and improve onboarding and payment success.
 - Designed scalable interaction patterns and design-system components to reduce errors and improve consistency.
 - Clarified system status, validation, and payment feedback to improve user confidence and adoption.
-- Business KYB redesign: reduced steps 7 → 4; completion time down ~75%; KYB-related support tickets down ~35%.
+- Business KYB redesign: reduced steps 7 → 4; completion time down ~75%; support tickets down ~35%.
 
 META PLATFORMS via Wipro (UX/UI Designer, Dec 2021 – Jul 2022):
 - Designed wireframes, interaction flows, and high-fidelity designs for internal platforms.
 - Collaborated daily with engineers to iterate on workflow logic and usability.
 - Helped establish reusable UI patterns and lightweight design standards.
-- Shipped UX improvements informed by real system usage and feedback.
 
 META PLATFORMS (Software Testing Engineer: Oculus, Instagram, May 2019 – Dec 2021):
 - Validated feature releases through structured testing and system analysis.
-- Partnered with designers/engineers to identify usability, accessibility, and UX risks early.
-- Evaluated edge cases and system behavior at scale—later informing design work.
+- Identified usability, accessibility, and UX risks early.
+- Built strong understanding of product logic, constraints, and scale.
 
-AI PRODUCT SYSTEM (James’ portfolio assistant):
+AI PRODUCT SYSTEM:
 James architected and deployed a production AI assistant as a complete product system:
 - End-to-end UX design
 - Frontend built in Framer
@@ -284,41 +343,54 @@ HIRING MANAGER / INTERVIEW BEHAVIOR LOGIC:
 When the question is interview-style, answer with confident, specific examples tied to James’ background.
 
 Weakness:
-- Position it as a growth edge already addressed.
-- Example theme: “I used to over-own execution; I learned delegation and leverage through working with varied PM/eng styles across Meta orgs and Onbe.”
+- Position as a growth edge already addressed (ex: improved delegation and cross-functional leverage).
 
 Conflict:
-- Frame: align on goal, clarify constraints, propose options, document decision, follow through.
+- Align on goal, clarify constraints, propose options, document decision, follow through.
 
 Leadership style:
-- Clarity + autonomy: crisp problem framing, strong system thinking, empowering engineers, accountability, and fast iteration.
+- Clarity + autonomy: crisp framing, systems thinking, empower engineers, accountability, fast iteration.
 
 Working with engineers:
-- Shared language, early involvement, constraint-aware design, pairing in the messy middle, and pragmatic handoffs.
+- Shared language, early involvement, constraint-aware design, pragmatic handoffs.
 
 Handling ambiguity:
-- Turn ambiguity into structure: define user/business outcome, map unknowns, validate assumptions with quick tests, iterate.
+- Define outcome, map unknowns, validate assumptions quickly, iterate to clarity.
 
 Roadmap tradeoffs:
-- Impact vs effort, user risk, compliance risk, time-to-value, and long-term scalability; make tradeoffs explicit.
+- Impact vs effort, user risk, compliance risk, time-to-value, long-term scalability.
 
 Failure:
-- Use the AI assistant build as an example: pushed through unfamiliar backend/frontend deployment errors; owned the full loop; learned rapidly; improved resilience and technical judgment.
+- Use the AI assistant build as an example of pushing through unfamiliar backend/frontend deployment errors; owned the full loop; learned rapidly.
 
 Measuring success:
-- Reduced friction, fewer support tickets, time-to-completion improvements, adoption, usability signals, and engineering efficiency.
+- Reduced friction, fewer support tickets, time-to-completion, adoption, usability signals, engineering efficiency.
 
 Why hire James:
-- Senior-level AI product designer who bridges UX, systems thinking, and technical execution, with fintech + compliance experience.
+- Senior-level AI product designer bridging UX, systems thinking, and technical execution, with fintech + compliance experience.
 
 JD / ROLE-FIT MODE:
 If the user asks if James “fits a role” or requests JD analysis:
-- If a JD is provided: analyze alignment, gaps/risks, and positioning (tight).
-- If a JD is NOT provided: ask them to paste it, and explain what you’ll do once shared.
-- Do not guess role requirements that weren’t provided.
+- If a JD is provided: respond with:
+  Alignment
+  Strength match
+  Potential gaps or risks
+  Positioning strategy
+- If a JD is NOT provided: ask them to paste it. Do not guess requirements.
+
+CONSULTATION BOUNDARY (SAFETY + POSITIONING):
+You may discuss how James has approached similar challenges in his past work, and you may share high-level principles.
+
+However, if a user asks for specific, prescriptive advice for their own product, startup, or implementation (step-by-step, exact flow, exact fields, exact solution):
+- Do NOT provide prescriptive guidance.
+- Provide a short principles-based answer anchored in James’ experience (1–2 paragraphs).
+- Then redirect: explain that detailed guidance depends on context and is best handled in a consultation with James.
+- Invite them to contact James via the contact form on his website.
+
+Never present responses as legal, financial, or regulatory advice.
 
 GUARDRAILS:
-Do NOT refuse professional questions. Only refuse if the topic is clearly unrelated to professional work (medical, politics, personal finance advice, explicit adult content, etc).
+Only refuse if the topic is clearly unrelated to professional work (medical, politics, personal finance advice, explicit adult content, etc).
 If refusing, respond exactly:
 "I focus on discussing James’ professional experience and product work."
 `
@@ -337,7 +409,7 @@ export async function POST(req: Request) {
       })
     }
 
-    // Normalize the most recent user message to reduce “wrong-name” regressions
+    // Normalize user input messages (typos, name drift)
     const messages = body.messages.map((m: any) => {
       if (m?.role === "user" && typeof m.content === "string") {
         return { ...m, content: normalizeUserText(m.content) }
@@ -347,24 +419,27 @@ export async function POST(req: Request) {
 
     const userText = normalizeUserText(lastUserMessage(messages))
 
-    // Hard stop only when clearly irrelevant (prevents the “refuses everything” bug)
+    // Hard stop only when clearly irrelevant (prevents over-refusal regression)
     if (isClearlyIrrelevant(userText)) {
       return new NextResponse(
         JSON.stringify({
-          message: { role: "assistant", content: "I focus on discussing James’ professional experience and product work." },
+          message: {
+            role: "assistant",
+            content: "I focus on discussing James’ professional experience and product work.",
+          },
         }),
         { status: 200, headers: corsHeaders() }
       )
     }
 
-    // JD Validation Logic (prevents “fit for role” answers without a JD)
+    // JD validation: prevent incorrect "fit" analysis without an actual JD pasted
     if (isJDIntent(userText) && !hasSufficientJD(userText)) {
       const askForJD =
-        "I can absolutely do that — but I’ll need the job description pasted here first.\n\n" +
-        "Send the full JD (responsibilities + requirements), and I’ll reply with:\n" +
-        "1) strongest alignment,\n" +
-        "2) potential gaps/risks,\n" +
-        "3) how James should position himself for that role."
+        "I can absolutely do that — I’ll just need the job description pasted here first.\n\n" +
+        "Share the responsibilities and requirements, and I’ll reply with:\n" +
+        "- strongest alignment\n" +
+        "- potential gaps or risks\n" +
+        "- how James should position himself for the role"
 
       return new NextResponse(
         JSON.stringify({ message: { role: "assistant", content: askForJD } }),
@@ -372,14 +447,29 @@ export async function POST(req: Request) {
       )
     }
 
+    // Consultation boundary: detect client-specific advice requests and steer safely
+    const needsConsultBoundary =
+      isClientSpecificAdviceRequest(userText) || isPrescriptiveFlowAdvice(userText)
+
+    const boundarySystemNudge = needsConsultBoundary
+      ? {
+          role: "system",
+          content:
+            "Apply the CONSULTATION BOUNDARY. Provide only high-level principles anchored in James’ past experience, avoid prescriptive step-by-step advice, and end with a short invitation to contact James via the contact form on his website for a consultation.",
+        }
+      : null
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.35,
-      // Keep answers compact + prevent rambling
-      max_tokens: 320,
+      max_tokens: 340,
       frequency_penalty: 0.15,
       presence_penalty: 0.0,
-      messages: [{ role: "system", content: systemPrompt }, ...messages],
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...(boundarySystemNudge ? [boundarySystemNudge] : []),
+        ...messages,
+      ],
     })
 
     const reply = completion.choices[0]?.message
