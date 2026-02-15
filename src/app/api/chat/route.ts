@@ -28,372 +28,232 @@ export async function OPTIONS() {
 }
 
 /* ----------------------------- */
-/* 🧠 V3 INTELLIGENCE LAYER      */
+/* 🧠 SYSTEM PROMPT              */
 /* ----------------------------- */
+const systemPrompt = `
+You are the portfolio AI assistant for James Flores.
 
-function normalizeUserText(raw: string) {
-  if (!raw) return raw
-  let t = raw.trim()
+VOICE:
+- Confident, senior-level, conversational, human.
+- Clear and recruiter / hiring-manager friendly.
+- Never robotic. Never overly corporate.
 
-  // Normalize whitespace
-  t = t
-    .replace(/\r\n/g, "\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
+IDENTITY & ACCURACY (CRITICAL):
+- Always refer to "James" or "James Flores" (not other names).
+- If the user misspells James’ name or uses another name, gently correct once (“You mean James Flores?”) and proceed.
+- Do NOT invent job titles. Use official titles:
+  - Product Designer — Onbe (July 2022 – June 2025)
+  - UX/UI Designer — Meta Platforms (via Wipro) (Dec 2021 – Jul 2022)
+  - Software Testing Engineer — Meta Platforms (Oculus, Instagram) (May 2019 – Dec 2021)
+- You may describe the scope as “senior-level” based on impact, but do not claim “Senior Product Designer” as a formal title unless asked about level (then clarify scope vs title).
 
-  // Normalize common name misspellings / wrong-name inputs
-  t = t.replace(/\bJada\b/gi, "James")
-  t = t.replace(/\bJame\b/gi, "James")
-  t = t.replace(/\bJaems\b/gi, "James")
-  t = t.replace(/\bJams\b/gi, "James")
-  t = t.replace(/\bJame\s+Flores\b/gi, "James Flores")
-  t = t.replace(/\bJames\s+Flore?s\b/gi, "James Flores")
-  t = t.replace(/\bJames\s+Jason\s+Flores\b/gi, "James Flores")
+RESPONSE FORMAT RULES (HARD REQUIREMENTS):
+- No markdown formatting.
+- No asterisks. No bullets using "-".
+- No long walls of text.
+- Default length: 4–7 sentences total.
+- Use blank lines between sections.
+- When listing experience, use this exact structure:
 
-  return t
-}
+One-sentence summary.
 
-function lastUserMessage(messages: any[]) {
+ONBE
+1–2 sentences.
+
+META PLATFORMS
+1–2 sentences.
+
+(Only include sections relevant to the question.)
+
+If the user asks an interview-style question, answer in:
+1 short paragraph (2–3 sentences),
+then an optional “Example” line (1 sentence).
+
+If the user asks for a JD analysis AND they pasted a JD:
+- Output:
+  1 sentence overview
+  3 “Strong matches” lines (each 1 sentence)
+  2 “Potential gaps” lines (each 1 sentence)
+  1 “How James would de-risk” line (1 sentence)
+- Keep it compact and concrete.
+
+POSITIONING (Hiring-manager ready):
+James is a product designer who bridges UX, systems thinking, and engineering fluency. He excels in complex, regulated workflows and building scalable, high-signal product experiences.
+
+CORE EXPERIENCE (Grounded):
+ONBE (Product Designer):
+- Led end-to-end UX for enterprise fintech platforms supporting global cross-border payouts and mobile wallet experiences.
+- Designed WCAG-compliant, regulated financial workflows with product, engineering, and compliance.
+- Ran research + usability testing + data analysis to reduce friction and improve onboarding/payment success.
+- Built scalable interaction patterns + design-system components to reduce errors and improve consistency.
+
+Meta Platforms (UX/UI Designer via Wipro):
+- Designed wireframes, flows, and high-fidelity UI for internal platforms.
+- Partnered daily with engineers; contributed reusable patterns + lightweight standards.
+
+Meta Platforms (Software Testing Engineer — Oculus, Instagram):
+- Validated feature releases; identified usability, accessibility, and UX risks early.
+- Built deep system-level understanding of product logic, constraints, and scale.
+
+AI PRODUCT SYSTEM (James’ portfolio assistant):
+- Designed the UX end-to-end in Framer.
+- Built backend API routes in Next.js, implemented CORS, deployed on Vercel.
+- Engineered structured system prompts + behavioral guardrails.
+- Approaches AI as product infrastructure (safety + reliability + experience), not a gimmick.
+
+AVAILABILITY:
+James is open to:
+- Contract work
+- Product consultation
+- AI integration in products (flat-fee engagements)
+- Senior-level AI-oriented product design roles
+
+INTERVIEW ANSWER LOGIC:
+- Weakness: show growth already addressed (e.g., learned to delegate and align across PM styles; now uses clear ownership + decision frameworks).
+- Conflict: structured communication, clarify constraints, align on goal, document decision, move forward.
+- Leadership style: clarity, systems thinking, empower engineers, accountability, unblock fast, raise quality bar.
+- Measuring success: reduced friction, completion time, support tickets, adoption, error rate, engineering efficiency.
+- Ambiguity: frame problem, define success, test assumptions, iterate with tight feedback loops.
+- Engineers: involve early, speak constraints, co-design with feasibility, reduce rework.
+- Roadmap tradeoffs: impact vs effort, user risk, compliance risk, scalability, opportunity cost.
+- Failure: building/deploying the AI system—pushed through unknowns, debugged, iterated, shipped; learned repeatable delivery system.
+
+SAFETY / CONSULTATION BOUNDARY (CRITICAL):
+Do NOT give product/UX “how-to” advice for the user’s product, startup, or flows (KYC, onboarding, checkout, pricing, etc).
+Instead:
+- Briefly say you can’t provide specific product advice here.
+- Offer a consultation with James and invite contact.
+- If helpful, ask them to share the context directly with James.
+
+If asked for finance, politics, medical, legal, or other unrelated topics:
+"I focus on discussing James’ professional experience and product work."
+
+CONTACT INVITE (use when appropriate, not every message):
+If a user asks for advice, consulting, or hiring:
+"Want to discuss this with James? Reach him via the contact section on jamesjasonflores.com."
+`
+
+/* ----------------------------- */
+/* 🧩 Helpers                    */
+/* ----------------------------- */
+function lastUserText(messages: any[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i]?.role === "user" && typeof messages[i]?.content === "string") {
-      return messages[i].content as string
+      return messages[i].content
     }
   }
   return ""
 }
 
-/**
- * Detect JD-related intent (role fit / analyze JD / tailor resume / match role).
- */
-function isJDIntent(text: string) {
+function looksLikeJobDescription(text: string): boolean {
+  const t = text.toLowerCase()
+  const jdSignals = [
+    "responsibilities",
+    "requirements",
+    "qualifications",
+    "what you'll do",
+    "what you will do",
+    "about the role",
+    "job description",
+    "we are looking for",
+    "preferred",
+    "nice to have",
+    "years of experience",
+    "compensation",
+    "salary",
+    "benefits",
+  ]
+  const hit = jdSignals.some((k) => t.includes(k))
+  return hit || text.length > 900 // long paste often indicates JD
+}
+
+function wantsJDAnalysis(text: string): boolean {
   const t = text.toLowerCase()
   return (
+    t.includes("jd") ||
     t.includes("job description") ||
-    t.includes(" jd") ||
-    t.includes("jd:") ||
-    t.includes("role fit") ||
-    t.includes("fit into this role") ||
+    t.includes("analyze this role") ||
     t.includes("fit for this role") ||
-    t.includes("match this role") ||
-    t.includes("tailor") ||
-    t.includes("ats") ||
-    t.includes("requirements") ||
-    t.includes("qualifications") ||
     t.includes("how would he fit") ||
-    t.includes("how would james fit") ||
-    t.includes("positioning for this role")
+    t.includes("how does he fit") ||
+    t.includes("align with this role") ||
+    t.includes("match this job") ||
+    t.includes("tailor to this role")
+  )
+}
+
+function isProductAdviceRequest(text: string): boolean {
+  const t = text.toLowerCase()
+
+  // Direct user-product signals
+  const ownershipSignals = ["my product", "my startup", "our product", "our startup", "my app", "our app", "my flow", "our flow", "we are building", "i'm building"]
+
+  // Advice verbs + flow keywords
+  const adviceVerbs = ["how should", "what should", "can you advise", "recommend", "best way", "best practice", "design a", "improve", "optimize", "fix", "approach"]
+  const flowKeywords = ["kyc", "onboarding", "signup", "sign up", "checkout", "payment flow", "payout", "compliance flow", "verification", "identity", "wallet flow", "pricing", "funnel"]
+
+  const owns = ownershipSignals.some((k) => t.includes(k))
+  const asksAdvice = adviceVerbs.some((k) => t.includes(k))
+  const mentionsFlow = flowKeywords.some((k) => t.includes(k))
+
+  // Conservative: any “how-to” about flows triggers redirect (even if not “my”)
+  return (asksAdvice && mentionsFlow) || (owns && (asksAdvice || mentionsFlow))
+}
+
+function consultationRedirectMessage(): string {
+  return (
+    "I can’t provide specific product-flow advice here.\n\n" +
+    "If you want guidance on a KYC/onboarding/payment flow, James can cover it in a consult so the recommendations match your users, constraints, and compliance requirements.\n\n" +
+    "Want to discuss this with James? Reach him via the contact section on jamesjasonflores.com."
+  )
+}
+
+function jdMissingMessage(): string {
+  return (
+    "I can do that, but I’ll need the job description text first.\n\n" +
+    "Paste the JD (responsibilities + requirements), and I’ll quickly map what matches, what’s missing, and how James would position it for a hiring manager."
   )
 }
 
 /**
- * Heuristic: does the user actually provide a JD block?
+ * Normalize model output so it stays readable in your UI:
+ * - Remove markdown tokens
+ * - Convert common bullet styles into sectioned spacing
+ * - Ensure blank lines between headings
  */
-function hasSufficientJD(text: string) {
-  const t = text.trim()
-  if (t.length >= 700) return true
+function normalizeAssistantText(raw: string): string {
+  if (!raw) return ""
 
-  const lower = t.toLowerCase()
-  const markers = [
-    "responsibilities",
-    "requirements",
-    "qualifications",
-    "about the role",
-    "what you'll do",
-    "what you will do",
-    "who you are",
-    "we are looking for",
-    "preferred qualifications",
-    "basic qualifications",
-    "nice to have",
-    "salary",
-    "benefits",
-    "equal opportunity",
-    "job summary",
-  ]
+  let text = raw
 
-  const hits = markers.filter((m) => lower.includes(m)).length
-  if (hits >= 2 && t.length >= 250) return true
+  // Strip common markdown artifacts
+  text = text.replace(/```[\s\S]*?```/g, "") // code fences
+  text = text.replace(/[*_`>#]/g, "") // markdown tokens
+  text = text.replace(/\r\n/g, "\n")
 
-  const lineCount = t.split("\n").filter(Boolean).length
-  if (lineCount >= 12 && t.length >= 300) return true
+  // Convert hyphen bullets into line breaks (but remove the hyphen)
+  text = text.replace(/\n-\s+/g, "\n")
+  text = text.replace(/(^|\n)-\s+/g, "$1")
 
-  return false
+  // Convert “SECTION:” into section headings
+  text = text.replace(/\b(ONBE|META PLATFORMS|META|ONBE NATIVE MOBILE APP|SPECIAL OLYMPICS OF TEXAS|AI PRODUCT SYSTEM|AI SYSTEM)\s*:\s*/gi, "\n\n$1\n")
+
+  // Force spacing after sentence endings when it looks compressed
+  text = text.replace(/([a-z0-9])\.\s+([A-Z])/g, "$1.\n\n$2")
+
+  // Collapse excessive blank lines
+  text = text.replace(/\n{3,}/g, "\n\n").trim()
+
+  // Guarantee a clean section layout if model forgot spacing
+  // (light touch: only if headings exist)
+  const headings = ["ONBE", "META PLATFORMS", "ONBE NATIVE MOBILE APP", "SPECIAL OLYMPICS OF TEXAS", "AI PRODUCT SYSTEM", "AI SYSTEM"]
+  for (const h of headings) {
+    const re = new RegExp(`\\n${h}\\n(?!\\n)`, "g")
+    text = text.replace(re, `\n${h}\n`)
+  }
+
+  return text
 }
-
-/**
- * Only refuse if clearly unrelated (avoid over-refusal regression).
- */
-function isClearlyIrrelevant(text: string) {
-  const t = text.toLowerCase()
-
-  const professionalAnchors = [
-    "design",
-    "product",
-    "ux",
-    "ui",
-    "portfolio",
-    "case study",
-    "research",
-    "usability",
-    "ai",
-    "prompt",
-    "system",
-    "workflow",
-    "compliance",
-    "enterprise",
-    "fintech",
-    "onbe",
-    "meta",
-    "oculus",
-    "instagram",
-    "wipro",
-    "leadership",
-    "engineer",
-    "roadmap",
-    "metrics",
-    "success",
-    "conflict",
-    "failure",
-    "hire",
-    "hiring",
-    "job",
-    "role",
-    "recruiter",
-    "resume",
-    "interview",
-    "collaboration",
-    "stakeholder",
-  ]
-  if (professionalAnchors.some((k) => t.includes(k))) return false
-
-  const offTopic = [
-    "medical",
-    "diagnose",
-    "symptom",
-    "prescription",
-    "politics",
-    "election",
-    "vote",
-    "crypto price",
-    "buy bitcoin",
-    "stock pick",
-    "parlay",
-    "gambling",
-    "sex",
-    "porn",
-  ]
-  if (offTopic.some((k) => t.includes(k))) return true
-
-  return false
-}
-
-/* ----------------------------- */
-/* 🛡 Consultation Boundary      */
-/* ----------------------------- */
-
-/**
- * Detect when a user is asking for advice for THEIR product/startup, which we want to
- * avoid turning into free step-by-step consulting.
- */
-function isClientSpecificAdviceRequest(text: string) {
-  const t = text.toLowerCase()
-
-  const ownershipSignals = [
-    "my product",
-    "my startup",
-    "my company",
-    "my app",
-    "my team",
-    "our product",
-    "our startup",
-    "our company",
-    "our app",
-    "we are building",
-    "we're building",
-    "we are designing",
-    "we're designing",
-    "for my users",
-    "for our users",
-    "for our business",
-    "for my business",
-    "for my client",
-    "for our client",
-  ]
-
-  const adviceSignals = [
-    "can you design",
-    "can you help design",
-    "tell me how to",
-    "step by step",
-    "exact steps",
-    "what should i do",
-    "what do you recommend",
-    "how should we",
-    "how do we",
-    "what is the best way",
-    "give me a flow",
-    "give me a framework",
-    "how would you build",
-    "how would you approach our",
-    "audit our",
-    "review our",
-  ]
-
-  const hasOwnership = ownershipSignals.some((p) => t.includes(p))
-  const wantsAdvice = adviceSignals.some((p) => t.includes(p))
-
-  return hasOwnership && wantsAdvice
-}
-
-/**
- * Also catch cases where they don't say "my startup" explicitly, but are asking for
- * detailed implementation guidance for a specific flow.
- */
-function isPrescriptiveFlowAdvice(text: string) {
-  const t = text.toLowerCase()
-  const prescriptivePatterns = [
-    "design a kyc flow",
-    "design a kyb flow",
-    "design a kyc/kyb flow",
-    "implement a kyc flow",
-    "implement a kyb flow",
-    "write the exact flow",
-    "exact screens",
-    "exact steps",
-    "what fields should we collect",
-    "what provider should we use",
-    "what is the best kyc vendor",
-  ]
-  return prescriptivePatterns.some((p) => t.includes(p))
-}
-
-/* ----------------------------- */
-/* 🧠 SYSTEM PROMPT (V3 MERGED)  */
-/* ----------------------------- */
-const systemPrompt = `
-You are the AI assistant for James Flores. You help recruiters, hiring managers, and potential clients understand James’ work and how he operates.
-
-VOICE (CRITICAL):
-- Confident, senior-level, conversational, human.
-- Helpful and clear. Not robotic. Not corporate.
-- Speak in first-person as James when appropriate, but you can also speak about “James” if the user asks in third-person. Match the user’s framing.
-
-FORMATTING RULES (CRITICAL):
-- Never produce a wall of text.
-- Max 3–4 short paragraphs total.
-- Each paragraph: 1–2 sentences.
-- Use spacing between sections.
-- Use simple labeled sections when helpful (ONBE, Meta Platforms, etc).
-- Use short bullet-like line breaks if helpful using hyphen lines only, but NO markdown bullets, NO asterisks, NO bold.
-- No emojis.
-- No special symbols like ★, •, or markdown formatting.
-- Keep answers tight, readable, and recruiter-friendly.
-
-TRUTH / ACCURACY (CRITICAL):
-- Do NOT invent details.
-- If unsure, say what you can confidently say based on the known background.
-- Title accuracy: At Onbe, James’ title was Product Designer (not “Senior” in title). You may describe his scope as senior-level when relevant, but do not claim the title was Senior Product Designer at Onbe.
-
-POSITIONING:
-James is an AI-oriented product designer with strong systems thinking and engineering fluency. He specializes in:
-- Complex enterprise workflows
-- Compliance-heavy systems
-- AI product integration
-- Cross-functional leadership
-- Scalable design systems and interaction patterns
-
-WORK AVAILABILITY:
-James is open to:
-- Contract work
-- Product design consultation
-- AI integration within products (flat-fee engagements)
-- Senior-level AI product design roles
-
-CORE EXPERIENCE (FACT BASE):
-ONBE (Product Designer, Jul 2022 – Jun 2025):
-- Led end-to-end UX for enterprise fintech platforms supporting global cross-border payouts and mobile wallet experiences.
-- Partnered with product, engineering, and compliance teams to design regulated, WCAG-compliant workflows.
-- Conducted user research, usability testing, and data analysis to reduce friction and improve onboarding and payment success.
-- Designed scalable interaction patterns and design-system components to reduce errors and improve consistency.
-- Clarified system status, validation, and payment feedback to improve user confidence and adoption.
-- Business KYB redesign: reduced steps 7 → 4; completion time down ~75%; support tickets down ~35%.
-
-META PLATFORMS via Wipro (UX/UI Designer, Dec 2021 – Jul 2022):
-- Designed wireframes, interaction flows, and high-fidelity designs for internal platforms.
-- Collaborated daily with engineers to iterate on workflow logic and usability.
-- Helped establish reusable UI patterns and lightweight design standards.
-
-META PLATFORMS (Software Testing Engineer: Oculus, Instagram, May 2019 – Dec 2021):
-- Validated feature releases through structured testing and system analysis.
-- Identified usability, accessibility, and UX risks early.
-- Built strong understanding of product logic, constraints, and scale.
-
-AI PRODUCT SYSTEM:
-James architected and deployed a production AI assistant as a complete product system:
-- End-to-end UX design
-- Frontend built in Framer
-- Backend API route in Next.js
-- CORS handling
-- Deployed on Vercel
-- Structured system prompting
-- Behavioral guardrails
-- Designed for recruiter/hiring-manager clarity
-
-HIRING MANAGER / INTERVIEW BEHAVIOR LOGIC:
-When the question is interview-style, answer with confident, specific examples tied to James’ background.
-
-Weakness:
-- Position as a growth edge already addressed (ex: improved delegation and cross-functional leverage).
-
-Conflict:
-- Align on goal, clarify constraints, propose options, document decision, follow through.
-
-Leadership style:
-- Clarity + autonomy: crisp framing, systems thinking, empower engineers, accountability, fast iteration.
-
-Working with engineers:
-- Shared language, early involvement, constraint-aware design, pragmatic handoffs.
-
-Handling ambiguity:
-- Define outcome, map unknowns, validate assumptions quickly, iterate to clarity.
-
-Roadmap tradeoffs:
-- Impact vs effort, user risk, compliance risk, time-to-value, long-term scalability.
-
-Failure:
-- Use the AI assistant build as an example of pushing through unfamiliar backend/frontend deployment errors; owned the full loop; learned rapidly.
-
-Measuring success:
-- Reduced friction, fewer support tickets, time-to-completion, adoption, usability signals, engineering efficiency.
-
-Why hire James:
-- Senior-level AI product designer bridging UX, systems thinking, and technical execution, with fintech + compliance experience.
-
-JD / ROLE-FIT MODE:
-If the user asks if James “fits a role” or requests JD analysis:
-- If a JD is provided: respond with:
-  Alignment
-  Strength match
-  Potential gaps or risks
-  Positioning strategy
-- If a JD is NOT provided: ask them to paste it. Do not guess requirements.
-
-CONSULTATION BOUNDARY (SAFETY + POSITIONING):
-You may discuss how James has approached similar challenges in his past work, and you may share high-level principles.
-
-However, if a user asks for specific, prescriptive advice for their own product, startup, or implementation (step-by-step, exact flow, exact fields, exact solution):
-- Do NOT provide prescriptive guidance.
-- Provide a short principles-based answer anchored in James’ experience (1–2 paragraphs).
-- Then redirect: explain that detailed guidance depends on context and is best handled in a consultation with James.
-- Invite them to contact James via the contact form on his website.
-
-Never present responses as legal, financial, or regulatory advice.
-
-GUARDRAILS:
-Only refuse if the topic is clearly unrelated to professional work (medical, politics, personal finance advice, explicit adult content, etc).
-If refusing, respond exactly:
-"I focus on discussing James’ professional experience and product work."
-`
 
 /* ----------------------------- */
 /* 🚀 POST HANDLER               */
@@ -409,75 +269,47 @@ export async function POST(req: Request) {
       })
     }
 
-    // Normalize user input messages (typos, name drift)
-    const messages = body.messages.map((m: any) => {
-      if (m?.role === "user" && typeof m.content === "string") {
-        return { ...m, content: normalizeUserText(m.content) }
-      }
-      return m
-    })
+    const userText = lastUserText(body.messages)
 
-    const userText = normalizeUserText(lastUserMessage(messages))
-
-    // Hard stop only when clearly irrelevant (prevents over-refusal regression)
-    if (isClearlyIrrelevant(userText)) {
+    // 1) Product advice boundary (legal/safety)
+    if (isProductAdviceRequest(userText)) {
       return new NextResponse(
-        JSON.stringify({
-          message: {
-            role: "assistant",
-            content: "I focus on discussing James’ professional experience and product work.",
-          },
-        }),
+        JSON.stringify({ message: { role: "assistant", content: consultationRedirectMessage() } }),
         { status: 200, headers: corsHeaders() }
       )
     }
 
-    // JD validation: prevent incorrect "fit" analysis without an actual JD pasted
-    if (isJDIntent(userText) && !hasSufficientJD(userText)) {
-      const askForJD =
-        "I can absolutely do that — I’ll just need the job description pasted here first.\n\n" +
-        "Share the responsibilities and requirements, and I’ll reply with:\n" +
-        "- strongest alignment\n" +
-        "- potential gaps or risks\n" +
-        "- how James should position himself for the role"
-
+    // 2) JD validation logic (if they want JD analysis but didn’t paste JD)
+    if (wantsJDAnalysis(userText) && !looksLikeJobDescription(userText)) {
       return new NextResponse(
-        JSON.stringify({ message: { role: "assistant", content: askForJD } }),
+        JSON.stringify({ message: { role: "assistant", content: jdMissingMessage() } }),
         { status: 200, headers: corsHeaders() }
       )
     }
 
-    // Consultation boundary: detect client-specific advice requests and steer safely
-    const needsConsultBoundary =
-      isClientSpecificAdviceRequest(userText) || isPrescriptiveFlowAdvice(userText)
-
-    const boundarySystemNudge = needsConsultBoundary
-      ? {
-          role: "system",
-          content:
-            "Apply the CONSULTATION BOUNDARY. Provide only high-level principles anchored in James’ past experience, avoid prescriptive step-by-step advice, and end with a short invitation to contact James via the contact form on his website for a consultation.",
-        }
-      : null
-
+    // 3) Normal assistant response
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.35,
-      max_tokens: 340,
-      frequency_penalty: 0.15,
-      presence_penalty: 0.0,
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...(boundarySystemNudge ? [boundarySystemNudge] : []),
-        ...messages,
-      ],
+      max_tokens: 420,
+      messages: [{ role: "system", content: systemPrompt }, ...body.messages],
     })
 
     const reply = completion.choices[0]?.message
+    const normalized = normalizeAssistantText(reply?.content || "")
 
-    return new NextResponse(JSON.stringify({ message: reply }), {
-      status: 200,
-      headers: corsHeaders(),
-    })
+    return new NextResponse(
+      JSON.stringify({
+        message: {
+          role: "assistant",
+          content: normalized,
+        },
+      }),
+      {
+        status: 200,
+        headers: corsHeaders(),
+      }
+    )
   } catch (error) {
     console.error("Server error:", error)
 
