@@ -79,7 +79,6 @@ HIGH-SIGNAL DOMAINS (grounded facts):
 - Fintech
 - B2B Global Payments
 - Regulated Financial Workflows
-- Blockchain / Web3
 - AI Product Systems
 - Internal Tooling
 - Enterprise UX
