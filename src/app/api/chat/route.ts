@@ -56,7 +56,8 @@ RESPONSE STYLE (CRITICAL):
 - No career storytelling unless asked.
 - Keep answers between 40–100 words unless JD analysis is requested.
 - Maximum 4 short lines total unless explicitly asked for detail.
-- Each line should be 1 sentence only.
+- Each line must be exactly 1 sentence.
+- Separate sections using blank lines only.
 
 DEFAULT STRUCTURE:
 
@@ -84,9 +85,30 @@ HIGH-SIGNAL DOMAINS (grounded facts):
 - Enterprise UX
 
 POSITIONING:
-James designs complex product systems in regulated and emerging markets.
+James designs complex product systems in regulated environments.
 He bridges UX, systems thinking, and engineering fluency.
 Most recently, he built and deployed his own AI portfolio assistant end-to-end.
+
+FAILURE LOGIC (IMPORTANT):
+
+If asked about failure:
+
+Frame it around building and deploying his AI system.
+
+Structure:
+First line acknowledging the setback.
+
+Blank line.
+
+Then 2–3 short lines explaining:
+- He underestimated infrastructure complexity.
+- He encountered backend and deployment constraints.
+- He developed stronger production-level systems thinking.
+- He now designs with engineering realities in mind.
+
+Never mention missing research.
+Never imply poor execution.
+Always frame failure as technical growth and ownership.
 
 SAFETY BOUNDARY:
 
@@ -108,8 +130,9 @@ If asked about unrelated topics:
 `
 
 /* ----------------------------- */
-/* 🧩 Helpers                    */
+/* 🧩 HELPERS                    */
 /* ----------------------------- */
+
 function lastUserText(messages: any[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i]?.role === "user" && typeof messages[i]?.content === "string") {
@@ -158,7 +181,7 @@ function isProductAdviceRequest(text: string): boolean {
     "my app",
     "our app",
     "we are building",
-    "i'm building"
+    "i'm building",
   ]
 
   const adviceVerbs = [
@@ -168,7 +191,7 @@ function isProductAdviceRequest(text: string): boolean {
     "best way",
     "optimize",
     "improve",
-    "fix"
+    "fix",
   ]
 
   const flowKeywords = [
@@ -177,7 +200,7 @@ function isProductAdviceRequest(text: string): boolean {
     "checkout",
     "pricing",
     "verification",
-    "payment flow"
+    "payment flow",
   ]
 
   const owns = ownershipSignals.some((k) => t.includes(k))
@@ -205,6 +228,7 @@ function jdMissingMessage(): string {
 /* ----------------------------- */
 /* 🚀 POST HANDLER               */
 /* ----------------------------- */
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
@@ -220,14 +244,18 @@ export async function POST(req: Request) {
 
     if (isProductAdviceRequest(userText)) {
       return new NextResponse(
-        JSON.stringify({ message: { role: "assistant", content: consultationRedirectMessage() } }),
+        JSON.stringify({
+          message: { role: "assistant", content: consultationRedirectMessage() },
+        }),
         { status: 200, headers: corsHeaders() }
       )
     }
 
     if (wantsJDAnalysis(userText) && !looksLikeJobDescription(userText)) {
       return new NextResponse(
-        JSON.stringify({ message: { role: "assistant", content: jdMissingMessage() } }),
+        JSON.stringify({
+          message: { role: "assistant", content: jdMissingMessage() },
+        }),
         { status: 200, headers: corsHeaders() }
       )
     }
@@ -235,7 +263,7 @@ export async function POST(req: Request) {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.28,
-      max_tokens: 300,
+      max_tokens: 280,
       messages: [
         { role: "system", content: systemPrompt },
         ...body.messages,
