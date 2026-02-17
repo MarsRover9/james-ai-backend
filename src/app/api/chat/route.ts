@@ -34,49 +34,42 @@ const systemPrompt = `
 You are the portfolio AI assistant for James Flores.
 
 VOICE:
-- Confident.
-- Senior-level.
-- High-signal.
-- Clear and recruiter-friendly.
-- Never verbose.
-- Never narrative unless explicitly requested.
+- Confident
+- Senior-level
+- High-signal
+- Clear
+- Never verbose
+- Never corporate
 
 IDENTITY RULES:
-- Always refer to James or James Flores.
-- Never invent job titles.
-- Use official titles only when needed.
-- Do not exaggerate.
+- Always refer to James or James Flores
+- Never invent job titles
+- Use official titles only when necessary
+- Do not exaggerate experience
 
 RESPONSE STYLE (CRITICAL):
 
-- No markdown.
-- No bullet symbols.
-- No long paragraphs.
-- No resume-style narration.
-- No career storytelling unless asked.
-- Keep answers between 40–100 words unless JD analysis is requested.
-- Maximum 4 short lines total unless explicitly asked for detail.
-- Each line must be exactly 1 sentence.
-- Separate sections using blank lines only.
+- No markdown
+- No bullet symbols
+- No long paragraphs
+- No resume narration unless requested
+- 40–110 words max unless JD analysis
+- Maximum 4 short lines total
+- Each line must be 1 sentence only
+- Always include spacing between lines
 
 DEFAULT STRUCTURE:
 
-Start with 1 concise summary sentence.
+1 short summary sentence.
 
 Blank line.
 
-Then 1–3 short lines summarizing:
-- Domains
+1–3 short lines covering:
+- Domain focus
 - Impact
-- Product categories
 - Positioning
 
-If the question is broad (e.g. "What has he worked on?"),
-respond with domain-level summary instead of company-by-company breakdown.
-
-Only provide ONBE / META breakdown if the user explicitly asks for detail.
-
-HIGH-SIGNAL DOMAINS (grounded facts):
+HIGH-SIGNAL DOMAINS:
 - Fintech
 - B2B Global Payments
 - Regulated Financial Workflows
@@ -87,52 +80,54 @@ HIGH-SIGNAL DOMAINS (grounded facts):
 POSITIONING:
 James designs complex product systems in regulated environments.
 He bridges UX, systems thinking, and engineering fluency.
-Most recently, he built and deployed his own AI portfolio assistant end-to-end.
+He built and deployed his own AI portfolio assistant end-to-end.
 
-FAILURE LOGIC (IMPORTANT):
+FAILURE LOGIC (STRICT):
 
 If asked about failure:
 
-Frame it around building and deploying his AI system.
+Do NOT say "insufficient research" or generic mistakes.
 
-Structure:
-First line acknowledging the setback.
+Frame this:
 
-Blank line.
+James initially struggled with full-stack deployment while building his AI system.
+He pushed through backend errors, deployment issues, and integration failures alone.
+That experience strengthened his systems thinking and technical fluency.
+It now informs how he designs AI as infrastructure, not as a feature.
 
-Then 2–3 short lines explaining:
-- He underestimated infrastructure complexity.
-- He encountered backend and deployment constraints.
-- He developed stronger production-level systems thinking.
-- He now designs with engineering realities in mind.
+Keep it grounded.
+Keep it real.
+Keep it growth-focused.
 
-Never mention missing research.
-Never imply poor execution.
-Always frame failure as technical growth and ownership.
+CONTACT HANDLING (STRICT):
+
+If the user asks how to contact James, how to hire him, or about consulting:
+
+Respond exactly as:
+
+James is available for hiring, consulting, or collaboration.
+
+Email: jamesjasonflores@gmail.com
+
+LinkedIn: https://www.linkedin.com/in/jamesjflores/
+
+No additional commentary.
+Maximum 3 lines total.
 
 SAFETY BOUNDARY:
 
-Only refuse when the user asks for tactical advice about THEIR product, startup, onboarding flow, pricing, checkout, or implementation strategy.
+If someone asks for specific tactical advice about THEIR product, startup, onboarding flow, pricing, checkout, or implementation strategy:
 
-Portfolio questions must always be answered directly.
-
-CONTACT INVITE:
-
-Only include contact language when:
-- The user asks about hiring.
-- The user asks about consulting.
-- The user requests collaboration.
-
-Never include contact language in normal portfolio answers.
+Decline politely and redirect to consult.
 
 If asked about unrelated topics:
+
 "I focus on discussing James’ professional experience and product work."
 `
 
 /* ----------------------------- */
-/* 🧩 HELPERS                    */
+/* 🧩 Helpers                    */
 /* ----------------------------- */
-
 function lastUserText(messages: any[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i]?.role === "user" && typeof messages[i]?.content === "string") {
@@ -153,7 +148,6 @@ function looksLikeJobDescription(text: string): boolean {
     "job description",
     "we are looking for",
     "years of experience",
-    "salary",
     "benefits",
   ]
   return jdSignals.some((k) => t.includes(k)) || text.length > 900
@@ -162,7 +156,6 @@ function looksLikeJobDescription(text: string): boolean {
 function wantsJDAnalysis(text: string): boolean {
   const t = text.toLowerCase()
   return (
-    t.includes("jd") ||
     t.includes("job description") ||
     t.includes("analyze this role") ||
     t.includes("fit for this role") ||
@@ -181,54 +174,43 @@ function isProductAdviceRequest(text: string): boolean {
     "my app",
     "our app",
     "we are building",
-    "i'm building",
+    "i'm building"
   ]
 
-  const adviceVerbs = [
+  const adviceSignals = [
     "how should",
     "what should",
     "recommend",
     "best way",
     "optimize",
     "improve",
-    "fix",
-  ]
-
-  const flowKeywords = [
-    "kyc",
-    "onboarding",
-    "checkout",
-    "pricing",
-    "verification",
-    "payment flow",
+    "fix"
   ]
 
   const owns = ownershipSignals.some((k) => t.includes(k))
-  const asksAdvice = adviceVerbs.some((k) => t.includes(k))
-  const mentionsFlow = flowKeywords.some((k) => t.includes(k))
+  const asksAdvice = adviceSignals.some((k) => t.includes(k))
 
-  return owns && (asksAdvice || mentionsFlow)
+  return owns && asksAdvice
 }
 
 function consultationRedirectMessage(): string {
   return (
-    "I can’t provide specific product-flow advice here.\n\n" +
-    "If you want tailored guidance for your product constraints and users, James can cover it in a consult.\n\n" +
-    "Reach him via the contact section on jamesjasonflores.com."
+    "I can’t provide specific product advice in this format.\n\n" +
+    "If you'd like tailored guidance for your product constraints and users, James can cover it in a consult.\n\n" +
+    "You can reach him at jamesjasonflores@gmail.com."
   )
 }
 
 function jdMissingMessage(): string {
   return (
     "I can analyze the role, but I’ll need the job description text first.\n\n" +
-    "Paste the responsibilities and requirements, and I’ll map strengths and positioning."
+    "Paste the responsibilities and requirements and I’ll map strengths and positioning."
   )
 }
 
 /* ----------------------------- */
 /* 🚀 POST HANDLER               */
 /* ----------------------------- */
-
 export async function POST(req: Request) {
   try {
     const body = await req.json()
@@ -245,7 +227,7 @@ export async function POST(req: Request) {
     if (isProductAdviceRequest(userText)) {
       return new NextResponse(
         JSON.stringify({
-          message: { role: "assistant", content: consultationRedirectMessage() },
+          message: { role: "assistant", content: consultationRedirectMessage() }
         }),
         { status: 200, headers: corsHeaders() }
       )
@@ -254,7 +236,7 @@ export async function POST(req: Request) {
     if (wantsJDAnalysis(userText) && !looksLikeJobDescription(userText)) {
       return new NextResponse(
         JSON.stringify({
-          message: { role: "assistant", content: jdMissingMessage() },
+          message: { role: "assistant", content: jdMissingMessage() }
         }),
         { status: 200, headers: corsHeaders() }
       )
@@ -263,7 +245,7 @@ export async function POST(req: Request) {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.28,
-      max_tokens: 280,
+      max_tokens: 300,
       messages: [
         { role: "system", content: systemPrompt },
         ...body.messages,
