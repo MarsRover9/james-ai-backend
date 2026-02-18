@@ -22,7 +22,7 @@ export async function OPTIONS() {
 }
 
 /* ============================= */
-/* 🧠 SYSTEM PROMPT v4           */
+/* 🧠 SYSTEM PROMPT v5           */
 /* ============================= */
 
 const systemPrompt = `
@@ -58,7 +58,7 @@ If question is specific (e.g. Onbe payout problem):
 
 If question is behavioral (failure, leadership, conflict):
 → Respond conversationally.
-→ Use varied growth examples.
+→ Rotate examples.
 → Do not reuse the same story repeatedly.
 
 If question is case study related:
@@ -67,12 +67,17 @@ If question is case study related:
    Approach
    Impact
    Reflection
-   (Keep tight, not verbose)
+   Keep tight.
 
 If question is technical:
 → Emphasize systems thinking, tradeoffs, engineering fluency.
 
-Never force a default opening sentence.
+If user pastes a job description:
+→ Analyze fit.
+→ Highlight relevant experience.
+→ Identify alignment areas.
+→ Keep it concise and confident.
+→ Never refuse job description analysis.
 
 IDENTITY:
 Refer to James or James Flores.
@@ -108,18 +113,17 @@ Problem: Accessibility violations blocking participation.
 Impact: WCAG AA compliance, 30% registration increase.
 
 FAILURE & GROWTH VARIATION:
-
 Rotate between:
 - Full-stack AI deployment learning curve
 - Delegation and leadership growth
 - Strategic validation misstep
 - Stakeholder alignment lesson
 
-Never reuse identical phrasing across similar questions.
-
 REFUSAL BOUNDARY:
 
-Only refuse if user asks for tactical advice about THEIR product, startup, pricing, onboarding flow, or implementation details.
+Only refuse if user is asking for tactical advice about their own product, startup, pricing, onboarding flow, or implementation details.
+
+Never refuse job description analysis.
 
 If refusal required:
 
@@ -129,15 +133,6 @@ If you'd like tailored guidance for your product constraints, James can discuss 
 
 Email: jamesjasonflores@gmail.com
 LinkedIn: https://www.linkedin.com/in/jamesjflores/"
-
-CONTACT LOGIC:
-
-If asked how to contact him:
-
-Email: jamesjasonflores@gmail.com
-LinkedIn: https://www.linkedin.com/in/jamesjflores/
-
-No extra commentary.
 `
 
 /* ============================= */
@@ -153,10 +148,36 @@ function lastUserText(messages: any[]): string {
   return ""
 }
 
+function isJobDescription(text: string): boolean {
+  const t = text.toLowerCase()
+
+  return (
+    t.includes("job description") ||
+    t.includes("responsibilities") ||
+    t.includes("what you'll do") ||
+    t.includes("preferred qualifications") ||
+    t.includes("about the role") ||
+    t.includes("qualifications") ||
+    t.includes("about us") ||
+    t.length > 1200
+  )
+}
+
 function isProductAdviceRequest(text: string): boolean {
   const t = text.toLowerCase()
-  const owns = t.includes("my product") || t.includes("my startup") || t.includes("our product")
-  const tactical = t.includes("how should") || t.includes("optimize") || t.includes("fix") || t.includes("design my")
+
+  const owns =
+    t.includes("my product") ||
+    t.includes("my startup") ||
+    t.includes("our product")
+
+  const tactical =
+    t.includes("how should") ||
+    t.includes("optimize") ||
+    t.includes("fix") ||
+    t.includes("design my") ||
+    t.includes("improve my onboarding")
+
   return owns && tactical
 }
 
@@ -186,7 +207,9 @@ export async function POST(req: Request) {
 
     const userText = lastUserText(body.messages)
 
-    if (isProductAdviceRequest(userText)) {
+    // Only block tactical consulting requests
+    // Never block job descriptions
+    if (!isJobDescription(userText) && isProductAdviceRequest(userText)) {
       return new NextResponse(
         JSON.stringify({
           message: { role: "assistant", content: consultationRedirectMessage() }
@@ -198,7 +221,7 @@ export async function POST(req: Request) {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.45,
-      max_tokens: 350,
+      max_tokens: 450,
       messages: [
         { role: "system", content: systemPrompt },
         ...body.messages,
